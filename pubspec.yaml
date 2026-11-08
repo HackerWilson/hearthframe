@@ -1,0 +1,45 @@
+name: hearthframe
+description: >-
+  A clean-room, open-source family photo frame for Android and iOS.
+  Plays photos and short videos from a local folder, SMB/CIFS or WebDAV,
+  with original code and design. Not affiliated with any commercial product.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Keep the screen on while in frame mode.
+  wakelock_plus: ^1.8.2
+  # Persist user settings.
+  shared_preferences: ^2.5.6
+  # Video playback in the slideshow.
+  video_player: ^2.14.1
+  # Runtime permissions (all-files access for the local source on Android).
+  # Pinned to 11.4.0: its Android plugin (12.1.0) compiles against SDK 34 and
+  # supports MANAGE_EXTERNAL_STORAGE. 13.x pulls permission_handler_android 14.x,
+  # which references Android 37 (Cinnamon Bun) symbols and requires compileSdk 37.
+  permission_handler: 11.4.0
+  # Platform cache/documents directories (network source cache, iOS local).
+  path_provider: ^2.1.6
+  # Network sources for NAS: WebDAV and SMB/CIFS (pure-Dart, cross-platform).
+  webdav_client: ^1.2.2
+  smb_connect: ^0.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+dependency_overrides:
+  # Vendored smb_connect 0.0.9 (Apache-2.0, license kept in vendor/) with a
+  # local patch: accept "host:port" so SMB shares on non-standard ports work
+  # (upstream hardcodes 445). See vendor/smb_connect/.../smb_transport.dart.
+  smb_connect:
+    path: vendor/smb_connect
+
+flutter:
+  uses-material-design: true
