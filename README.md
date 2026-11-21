@@ -13,7 +13,7 @@ Built with Flutter. Clean-room code and design, MIT licensed.
 ## Highlights
 
 - **One show for photos and videos.** Stills get a slow Ken Burns motion;
-  videos play once with sound and the frame moves on by itself.
+  videos play once (muted by default) and the frame moves on by itself.
 - **Local or NAS.** Local folders, WebDAV (Synology WebDAV Server, Nextcloud,
   ownCloud, …) and SMB/CIFS shares (Synology, Windows, Samba, …). Credentials
   stay in app-private preferences on the device.
@@ -24,7 +24,11 @@ Built with Flutter. Clean-room code and design, MIT licensed.
 - **Frame-style playback.** Cross-fade transitions, optional fill-screen crop
   or whole-photo view over a blurred backdrop, shuffle, clock overlay,
   immersive full screen, keep-screen-on, and controls that auto-hide after
-  four seconds.
+  six seconds.
+- **Made to run unattended.** Optional launch at boot, launch when power is
+  connected, exit when unplugged, an active-hours gate and a daily
+  start/stop schedule. Settings are mirrored to a native scheduler so they
+  work while the Flutter UI is not running.
 - **Gestures.** Swipe left/right for next/previous; tap to reveal controls.
 - **Robust decoding.** EXIF orientation is applied exactly once, decoded
   bitmaps are bounded to the panel size, HEIC/HEIF are converted through the
@@ -33,6 +37,37 @@ Built with Flutter. Clean-room code and design, MIT licensed.
 - **Optional keep_adb.** On OEM builds that switch wireless debugging off,
   HearthFrame can restore it after boot or standby when explicitly granted
   `WRITE_SECURE_SETTINGS` (opt-in; a no-op otherwise).
+
+## Automation (Android)
+
+Settings → Automation mirrors the schedule to native code so it keeps working
+when Flutter is not running. Boot and charging launches, the active-hours
+gate and the daily start/stop schedule are implemented without a persistent
+foreground service.
+
+Android 10+ blocks activity starts from the background. HearthFrame uses a
+high-importance notification with a full-screen intent, and also attempts a
+direct start for devices/OEMs that permit it. ChromeOS/ARC has a known
+platform quirk: `BatteryService` can report discharging while AC is
+connected, so the charging-constrained job may not cold-start there; boot
+and schedule launches still work. On first use, open Settings →
+Automation → **Background permissions** and grant each item:
+
+1. Notifications
+2. Display over other apps
+3. Exact alarms
+4. Full-screen notifications
+
+On MIUI/HyperOS, two extra OEM switches are required:
+
+- **System autostart** — allow HearthFrame in the background-start list.
+- **Background pop-up** — Other permissions → 后台弹出界面 → Always allow.
+  Without this switch MIUI aborts background activity starts even when
+  Android's `SYSTEM_ALERT_WINDOW` permission is granted.
+
+Set the app's battery saver to unrestricted as well. These OEM allowlists are
+what let a photo-frame app come up reliably while the screen is on or
+unlocked.
 
 ## Source support
 
@@ -70,13 +105,16 @@ fields and press **Start photo frame**.
 
 | Setting | Default | Range / effect |
 | --- | --- | --- |
-| Slide duration | 8 s | 3–60 s; stills only (videos advance when they finish). |
-| Transition | 600 ms | 0–2000 ms cross-fade. |
+| Slide duration | 30 s | 3–60 s; stills only (videos advance when they finish). |
+| Transition | Fade | Fade, slide or zoom. |
 | Shuffle | on | Random play order. |
-| Show clock | on | 12-hour clock, top left. |
+| Favor recent media | on | Weighted shuffle: newer items appear more often. |
+| Mute videos | on | Videos play without sound. |
+| Clock | on | Time and date, optional backdrop and 70–140% size. |
 | Keep screen on | on | Holds a wake lock while the frame is in the foreground. |
 | Fill screen | on | Crops photos to the edges; off shows the whole photo over a blurred backdrop. |
-| Motion effect | on | Slow Ken Burns zoom and pan on stills. |
+| Motion effect | on | Slow Ken Burns zoom and pan on stills, 50–150% speed. |
+| Automation | off | Boot launch, charging launch, unplug exit, active hours and a daily schedule. |
 
 ## Documentation
 
@@ -98,8 +136,9 @@ lib/
   sources.dart        source abstraction and local folder scanner
   nas_sources.dart    WebDAV and SMB/CIFS sources with on-device cache
   platform_image.dart HEIC/HEIF conversion through a platform channel
-android/              Android runner, HEIC converter, keep_adb guard
-vendor/smb_connect/   vendored Apache-2.0 SMB client (host:port patch)
+  automation.dart     bridge to the native boot/charging/schedule engine
+android/              Android runner, HEIC converter, keep_adb, FrameAutomation
+vendor/smb_connect/   vendored Apache-2.0 SMB client (host:port + 64 KiB read patch)
 test/                 unit and widget tests
 docs/                 specification, architecture and testing notes
 ```
@@ -111,8 +150,8 @@ only to the source you configure.
 
 - Credentials are stored in the app's private `SharedPreferences`, protected
   by the Android app sandbox. They are not additionally encrypted at rest.
-- Network media is cached in the app cache directory; clearing app storage
-  removes it.
+- Network media is cached in the app cache directory, capped at 1.5 GiB with
+  oldest-first eviction; Settings > Storage shows usage and can clear it.
 - Prefer HTTPS for WebDAV. Plain HTTP is supported for trusted home networks.
 - The SMB client supports SMB 1/2.0/2.1. Prefer a modern NAS configuration
   and a dedicated read-only account; SMB1 is legacy and insecure.

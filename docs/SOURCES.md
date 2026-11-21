@@ -98,7 +98,12 @@ Both network sources share the cache implementation:
 - A non-empty existing file is reused.
 - Downloads are written to `<name>.part` and renamed only on success.
 - Old generations with the same hash prefix are deleted after success.
+- The cache is pruned to 1.5 GiB after downloads, oldest file first (the
+  slide on screen is never evicted); Settings > Storage shows usage and can
+  clear it.
 - The next queue item is prefetched after the current item is ready.
+- A cold scan starts on the first still, so a leading video never delays the
+  first frame; videos keep their slots.
 - A failed prepare is skipped by the slideshow; a decode failure deletes the
   cached file.
 

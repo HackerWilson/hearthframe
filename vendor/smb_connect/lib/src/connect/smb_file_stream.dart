@@ -22,7 +22,14 @@ Stream<Uint8List> smbOpenRead(
     [int? length]) async* {
   // int openReadNum = openReadNextNum++;
   length = length ?? (file.size - start);
-  var buffSize = min(length, 0xFFF);
+  if (length <= 0) {
+    await smbCloseFile(file, tree, fileId, fid);
+    return;
+  }
+  // Read in 64 KiB blocks. Upstream used 4 KiB, which turned a single video
+  // into tens of thousands of SMB round trips (minutes of CPU-bound waiting);
+  // this matches the block size smbReadFromFile already uses internally.
+  var buffSize = min(length, 64936);
   var position = 0;
   Uint8List buff = Uint8List(buffSize);
   do {
@@ -30,12 +37,12 @@ Stream<Uint8List> smbOpenRead(
     var readLen = min(buff.length, remain);
     var res = await smbReadFromFile(
         file, tree, fileId, fid, buff, position + start, 0, readLen);
-    if (readLen == buff.length) {
-      yield buff;
-    } else {
-      yield Uint8List.view(buff.buffer, 0, readLen);
-    }
-    position += res;
+    if (res <= 0) break;
+    final got = min(res, readLen);
+    // Copy: the buffer is reused by the next iteration, while downstream
+    // consumers may still hold the yielded view.
+    yield Uint8List.fromList(Uint8List.view(buff.buffer, 0, got));
+    position += got;
   } while (position < length);
   await smbCloseFile(file, tree, fileId, fid);
 }

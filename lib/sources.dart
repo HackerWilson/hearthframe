@@ -2,16 +2,30 @@ import 'dart:io';
 
 /// A media item to display in the frame.
 class MediaItem {
-  const MediaItem(this.path, {this.isVideo = false, this.size, this.mtime});
+  const MediaItem(
+    this.path, {
+    this.isVideo = false,
+    this.size,
+    this.mtime,
+    this.originalPath,
+  });
   final String path;
   final bool isVideo;
+  final String? originalPath;
+
+  MediaItem cachedAt(String localPath, {int? size, int? mtime}) => MediaItem(
+    localPath,
+    isVideo: isVideo,
+    size: size ?? this.size,
+    mtime: mtime ?? this.mtime,
+    originalPath: originalPath ?? path,
+  );
 
   /// Remote byte size when known; used to invalidate stale local caches
   /// after a file is replaced on the NAS.
   final int? size;
 
-  /// Remote modification time (source-specific units) when known; catches
-  /// same-size replacements such as EXIF-only edits.
+  /// Source modification time in Unix milliseconds, never cache write time.
   final int? mtime;
 }
 
@@ -66,7 +80,9 @@ class LocalFolderSource implements PhotoSource {
   }
 
   Future<void> _walk(
-      Directory dir, void Function(List<MediaItem>) onBatch) async {
+    Directory dir,
+    void Function(List<MediaItem>) onBatch,
+  ) async {
     final batch = <MediaItem>[];
     final subdirs = <Directory>[];
     await for (final e in dir.list(followLinks: false)) {
@@ -76,9 +92,15 @@ class LocalFolderSource implements PhotoSource {
         subdirs.add(e);
       } else if (e is File) {
         final ext = _ext(e.path);
-        if (_imageExt.contains(ext)) batch.add(MediaItem(e.path));
-        if (_videoExt.contains(ext)) {
-          batch.add(MediaItem(e.path, isVideo: true));
+        final isImage = _imageExt.contains(ext);
+        final isVideo = _videoExt.contains(ext);
+        if (isImage || isVideo) {
+          // mtime feeds the "favor recent" shuffle; a failed stat is harmless.
+          int? mtime;
+          try {
+            mtime = e.lastModifiedSync().millisecondsSinceEpoch;
+          } catch (_) {}
+          batch.add(MediaItem(e.path, isVideo: isVideo, mtime: mtime));
         }
       }
     }

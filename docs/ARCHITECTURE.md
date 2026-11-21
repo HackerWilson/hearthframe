@@ -11,6 +11,7 @@ non-obvious parts are the way they are. For product behavior see
 main()
   ├─ SystemChrome.setPreferredOrientations([portraitUp])
   ├─ FrameSettings.load()                    (shared_preferences)
+  ├─ automation: mirror settings to native, re-arm alarms/jobs
   ├─ keep_adb: MethodChannel 'hearthframe/adb_keep'.ensure()
   │             + Timer.periodic(60 s)
   └─ runApp(HearthFrameApp)
@@ -34,11 +35,14 @@ versus slideshow, and the slideshow keeps its own state.
 | `lib/settings.dart` | `FrameSettings`: typed getters/setters over `SharedPreferences`, defaults and `isConfigured`. |
 | `lib/sources.dart` | `MediaItem`, skip rules, `PhotoSource` abstraction, `LocalFolderSource` (recursive walk). |
 | `lib/nas_sources.dart` | `NetworkSource`, shared extension sets, on-device cache, `WebDavSource`, `SmbSource`. |
+| `lib/media_cache.dart` | Cache directory, size accounting, 1.5 GiB LRU eviction and clearing. |
 | `lib/platform_image.dart` | HEIC/HEIF detection and conversion through the `hearthframe/image` channel. |
-| `android/.../MainActivity.kt` | Registers the two method channels, starts `keep_adb` on create. |
+| `lib/automation.dart` | Bridge to native automation: configure, permission status, OEM shortcut. |
+| `android/.../MainActivity.kt` | Registers the method channels, starts `keep_adb`, handles stop/power receivers. |
+| `android/.../FrameAutomation.kt` | Native boot/charging/schedule engine, launch notification, permissions. |
 | `android/.../HeicConvert.kt` | Off-main-thread HEIC decode, EXIF handling, atomic JPEG write. |
 | `android/.../AdbKeep.kt` | Opt-in wireless ADB restoration (`ensure` and boot-time `force`) and `BootReceiver`. |
-| `vendor/smb_connect/` | Apache-2.0 SMB client, patched to accept `host:port` (see ADR-008). |
+| `vendor/smb_connect/` | Apache-2.0 SMB client, patched for `host:port` and 64 KiB reads (see ADR-008, ADR-013). |
 
 ## 3. Initialization and orientation
 
@@ -177,6 +181,31 @@ HEIC conversion runs on a single-thread executor. `ImageDecoder` already
 applies EXIF orientation, so the Kotlin path only rotates on the
 `BitmapFactory` fallback (ADR-007).
 
+## 8.1 Automation
+
+`FrameSettings.automationConfig` is pushed to `FrameAutomation` on every
+change. Native preferences (`frame_automation`) are the source of truth for
+boot, charging and alarms, because Flutter is not running then.
+
+- **Boot:** `BootReceiver` calls `FrameAutomation.onBoot`, re-arms the daily
+  alarms and charging jobs, and launches when enabled and inside the
+  active-hours/schedule windows.
+- **Charging:** a persisted `JobScheduler` job with `setRequiresCharging`
+  covers cold launches; a dynamic receiver in `MainActivity` handles
+  unplug-exit while the frame is open.
+- **Schedule:** one-shot `setExactAndAllowWhileIdle` alarms for the next
+  start/stop; each receiver re-arms the following day.
+- **Launch path:** a high-importance notification with a full-screen intent,
+  a direct `startActivity` and a system-delivered alarm are attempted in
+  order. Android 10+ blocks the direct start unless the OEM grants an
+  exemption; the full-screen notification is the sanctioned fallback.
+- **Gating:** the schedule window gates charging and boot launches, so the
+  charging job does not reopen a frame stopped at the schedule end.
+- **Stay on:** while "Keep screen on" is enabled, `MainActivity` holds a
+  native `SCREEN_BRIGHT_WAKE_LOCK` between resume and pause, in addition to
+  the Flutter window `KEEP_SCREEN_ON` flag, and asks the window manager to
+  dismiss a non-secure keyguard.
+
 ## 9. Android manifest and permissions
 
 | Permission | Reason |
@@ -232,5 +261,31 @@ lock orientation in the manifest; landscape is requested at runtime (ADR-003).
   keeps retrying items; the spinner may persist until the source returns.
 - Credentials are not encrypted beyond the OS app sandbox.
 - SMB support is SMB 1/2.0/2.1, not SMB3.
+- One source is active at a time; multiple shares are not aggregated yet.
+- Orientation filtering ("portrait only" / "landscape only") and photo
+  metadata overlays (file, location, capture time) are not implemented.
+- Background auto-start depends on OEM permissions. The app surfaces the
+  standard permissions and MIUI/HyperOS shortcuts, but cannot override an
+  OEM that blocks background activity starts for non-allowlisted apps.
+- On ChromeOS/ARC, `BatteryService` may keep `status=3` (discharging) even
+  when AC is connected, so the `JobScheduler` CHARGING constraint never
+  satisfies. "Launch when charging" therefore may not cold-start on ARC;
+  boot and schedule launches are unaffected while the Chromebook is awake.
+  The app's own `isCharging` check uses the plugged flag and is correct.
+- ChromeOS may sleep after the frame exits (e.g. at the 23:00 schedule
+  stop), which drops Wi-Fi/ADB; an Android `RTC_WAKEUP` alarm inside ARCVM
+  cannot wake the Chromebook itself. The 07:00 schedule start therefore
+  cannot be guaranteed on a sleeping Chromebook. For an always-on wall
+  frame, keep ChromeOS awake while plugged in; Redmi/ordinary Android
+  devices are unaffected.
+- Rapidly tapping **Refresh** can start overlapping `_load()` calls. Each
+  load closes the previous SMB source while a prefetch is still bound,
+  which can abort a video that was just cached (observed on ChromeOS:
+  ExoPlayer released after 0.25 s with
+  `Bad state: StreamSink is bound to a stream`). Normal playback is not
+  affected and the frame skips the item and continues. Planned fixes:
+  a re-entry/debounce guard on `_load()`, an idempotent `SmbSource.close()`
+  that waits for/bounds active streams, and disposing the player before
+  closing the source.
 - The iOS runner is a scaffold and is unverified.
 - The release build is debug-signed in this repository.

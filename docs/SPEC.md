@@ -123,7 +123,7 @@ NAS share, with frame-style transitions and minimal interaction.
 
 ### FR-6 Video
 
-- FR-6.1 Videos play once with sound, centred at their aspect ratio.
+- FR-6.1 Videos play once, muted by default, centred at their aspect ratio.
 - FR-6.2 Completion is detected when playback has stopped within 300 ms of
   the end.
 - FR-6.3 Pause and resume follow the frame pause state.
@@ -132,13 +132,16 @@ NAS share, with frame-style transitions and minimal interaction.
 
 - FR-7.1 A tap toggles a bottom control bar: previous, play/pause, next,
   change source, refresh, settings.
-- FR-7.2 The bar auto-hides after four seconds.
+- FR-7.2 The bar auto-hides after six seconds. Hover or a pointer press
+  suspends the countdown; pause keeps the bar visible.
 - FR-7.3 A horizontal swipe with velocity above 200 px/s moves to the next
   item (left) or the previous item (right).
 - FR-7.4 The frame uses immersive sticky system UI; normal system UI is
   restored when the slideshow is disposed.
-- FR-7.5 The clock overlay shows a 12-hour `h:mm AM/PM` time at the top left,
-  updated once per second, when enabled.
+- FR-7.5 The clock overlay shows the time and date at the top left, updated
+  every ten seconds, when enabled. Format follows the system or an explicit
+  12/24-hour choice; an optional translucent backdrop and 70–140% size are
+  available.
 
 ### FR-8 Settings
 
@@ -184,7 +187,7 @@ NAS share, with frame-style transitions and minimal interaction.
 ### Controls
 
 1. Tap anywhere → control bar appears.
-2. Tap outside the bar (or wait four seconds) → the bar hides.
+2. Tap outside the bar (or wait six seconds) → the bar hides.
 3. Tap pause → the current item freezes; tap play to resume.
 4. Tap the folder icon → setup screen; Start applies and returns.
 
@@ -203,18 +206,50 @@ NAS share, with frame-style transitions and minimal interaction.
 
 | Key | Type | Default | Range | Effect |
 | --- | --- | --- | --- | --- |
-| `interval_seconds` | int | 8 | 3–60 | Time per still image. |
+| `interval_seconds` | int | 30 | 3–60 | Time per still image. |
 | `transition_ms` | int | 600 | 0–2000 | Cross-fade duration. |
 | `shuffle` | bool | true | — | Random order on load and rescan start. |
+| `recent_weighted` | bool | true | — | Weight the shuffle toward newer media (mtime rank, 1–5×). |
+| `video_muted` | bool | true | — | Play videos without sound. |
 | `show_clock` | bool | true | — | Clock overlay. |
+| `clock_background` | bool | false | — | Translucent panel behind the clock. |
+| `clock_scale` | double | 1.0 | 0.7–1.4 | Clock size multiplier. |
 | `keep_awake` | bool | true | — | Wakelock while the frame is shown. |
 | `fill_screen` | bool | true | — | Cover-crop instead of contain on a blurred backdrop. |
 | `motion_effect` | bool | true | — | Ken Burns zoom/pan on stills. |
+| `motion_speed` | double | 1.0 | 0.5–1.5 | Ken Burns speed multiplier. |
+| `auto_launch_boot` | bool | false | — | Launch the frame after boot. |
+| `auto_launch_power` | bool | false | — | Launch when the charger is connected. |
+| `auto_exit_power` | bool | false | — | Close the frame when unplugged. |
+| `auto_active_hours` | bool | false | — | Active-hours gate for boot/charging starts. |
+| `auto_active_start`, `auto_active_end` | int | 420, 1380 | 0–1439 | Minutes after midnight. |
+| `auto_schedule` | bool | false | — | Daily start/stop schedule. |
+| `auto_schedule_start`, `auto_schedule_end` | int | 420, 1380 | 0–1439 | Minutes after midnight. |
 | `source_type` | string | `local` | `local`, `webdav`, `smb` | Active source. |
 | `setup_mode` | bool | false | — | Force the setup screen. |
 | `source_folder` | string | `''` | — | Local folder path. |
 | `webdav_url`, `webdav_user`, `webdav_pass`, `webdav_path` | string | `''` | — | WebDAV configuration. |
 | `smb_host`, `smb_domain`, `smb_user`, `smb_pass`, `smb_path` | string | `''` | — | SMB configuration. |
+
+### FR-11 Automation (Android)
+
+- FR-11.1 Automation settings are mirrored to native preferences on every
+  change; boot, charging and schedule triggers must work with Flutter not
+  running.
+- FR-11.2 `BOOT_COMPLETED` launches the frame when **Launch at startup** is
+  on and the active-hours window permits it.
+- FR-11.3 A charging-constrained `JobScheduler` job launches the frame when
+  power is connected (periodic safety net plus a one-shot cold-plug job).
+- FR-11.4 While the frame runs, a context-registered receiver closes it on
+  `POWER_DISCONNECTED` when **Exit when unplugged** is on.
+- FR-11.5 A daily schedule arms exact start/stop alarms; the schedule window
+  also gates charging/boot launches so a stopped frame is not immediately
+  reopened by the charging job.
+- FR-11.6 Background activity starts use a high-importance notification with
+  a full-screen intent, plus a direct start and an AlarmManager launch
+  attempt for devices that permit them. Missing permissions are surfaced in
+  Settings with a step-by-step grant flow and MIUI/HyperOS shortcuts for
+  autostart and 后台弹出界面 (background pop-up).
 
 ## 9. Non-functional requirements
 
@@ -230,7 +265,7 @@ NAS share, with frame-style transitions and minimal interaction.
 - **NFR-5 Reliability:** the frame can run continuously; unreadable media is
   skipped without user action.
 - **NFR-6 Accessibility:** control targets are standard Material icon
-  buttons; larger clock/text options are future work.
+  buttons with 44 px minimum targets; clock size is adjustable.
 
 ## 10. Acceptance criteria (verified 2026-11-08)
 

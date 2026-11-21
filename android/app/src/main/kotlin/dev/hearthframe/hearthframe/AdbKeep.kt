@@ -59,11 +59,12 @@ object AdbKeep {
     }
 }
 
-/** Restores wireless ADB after the device boots (needs autostart allowed on MIUI/HyperOS). */
+/** Restores wireless ADB and frame automation after the device boots. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             AdbKeep.force(context)
+            FrameAutomation.onBoot(context)
         }
     }
 }

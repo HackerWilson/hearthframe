@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Android automation: launch at boot, launch when charging, exit when
+  unplugged, active-hours gate and a daily start/stop schedule, with a
+  native scheduler and a step-by-step permission flow (including an
+  MIUI/HyperOS autostart shortcut).
+- Video mute, recent-weighted shuffle, clock backdrop and clock size, and
+  adjustable Ken Burns speed.
+- 64 KiB SMB reads (from 4 KiB), producing roughly an order-of-magnitude
+  faster first frame on large NAS libraries.
+- Quick-start on the first still, media-cache LRU cap (1.5 GiB), cache usage
+  and clear UI, and a bounded Flutter image cache.
+- Orientation attach now runs only on MIUI; ChromeOS and stock Android start
+  in landscape without a portrait boot frame.
+- Control bar hides after six seconds, pauses the countdown on hover/press,
+  stays visible while paused, and uses 44 px dense targets.
+
+### Changed
+
+- Default slide duration is 30 seconds; videos are muted by default.
+
+### Fixed
+
+- The frame could still be locked/screen-off after the system timeout on
+  MIUI even with the window flag set. A native screen-bright wake lock now
+  backs up `KEEP_SCREEN_ON` while the frame is resumed, and the window asks
+  the system to dismiss a non-secure keyguard.
+
 ## [0.1.0] - 2026-11-08
 
 Initial public release.

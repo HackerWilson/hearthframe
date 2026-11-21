@@ -58,3 +58,6 @@ key.properties
 /android/.kotlin/
 /android/build/
 /android/app/build/
+
+# Vendored package build artifacts
+vendor/*/build/
